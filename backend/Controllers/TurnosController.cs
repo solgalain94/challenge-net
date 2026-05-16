@@ -45,25 +45,49 @@ public class TurnosController : ControllerBase
         if (paciente == null)
             return NotFound(new { mensaje = "Paciente no encontrado." });
 
-        if (paciente.Bloqueado)
-            return BadRequest(new { mensaje = "El paciente se encuentra bloqueado para agendar turnos online." });
+        using (var transaction = await _context.Database.BeginTransactionAsync())
+        {
+            try
+            {
+                // Evaluar si el bloqueo temporal expiró (30 días)
+                if (paciente.Bloqueado && paciente.FechaBloqueo.HasValue)
+                {
+                    var tiempoDesdeBloqueo = DateTime.Now - paciente.FechaBloqueo.Value;
+                    if (tiempoDesdeBloqueo.TotalDays >= 30)
+                    {
+                        paciente.Bloqueado = false;
+                        paciente.FechaBloqueo = null;
+                    }
+                }
 
-        var medicoExiste = await _context.Medicos.AnyAsync(m => m.Id == turno.MedicoId);
-        if (!medicoExiste)
-            return NotFound(new { mensaje = "Médico no encontrado." });
+                if (paciente.Bloqueado)
+                    return BadRequest(new { mensaje = "El paciente se encuentra bloqueado para agendar turnos online." });
 
-        var turnoConflicto = await _context.Turnos.AnyAsync(t =>
-            t.MedicoId == turno.MedicoId &&
-            t.FechaHora == turno.FechaHora &&
-            t.Estado != EstadoTurno.Cancelado);
-        if (turnoConflicto)
-            return BadRequest(new { mensaje = "El médico ya tiene un turno en ese horario." });
+                var medicoExiste = await _context.Medicos.AnyAsync(m => m.Id == turno.MedicoId);
+                if (!medicoExiste)
+                    return NotFound(new { mensaje = "Médico no encontrado." });
 
-        turno.FechaCreacion = DateTime.UtcNow;
-        turno.Estado = EstadoTurno.Pendiente;
-        _context.Turnos.Add(turno);
-        await _context.SaveChangesAsync();
-        return CreatedAtAction(nameof(GetById), new { id = turno.Id }, turno);
+                var turnoConflicto = await _context.Turnos.AnyAsync(t =>
+                    t.MedicoId == turno.MedicoId &&
+                    t.FechaHora == turno.FechaHora &&
+                    t.Estado != EstadoTurno.Cancelado);
+                if (turnoConflicto)
+                    return BadRequest(new { mensaje = "El médico ya tiene un turno en ese horario." });
+
+                turno.FechaCreacion = DateTime.UtcNow;
+                turno.Estado = EstadoTurno.Pendiente;
+                _context.Turnos.Add(turno);
+                await _context.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+                return CreatedAtAction(nameof(GetById), new { id = turno.Id }, turno);
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
     }
 
     [HttpGet("cancelar/{id}")]
