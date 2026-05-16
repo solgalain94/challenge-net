@@ -107,15 +107,40 @@ public class TurnosController : ControllerBase
     [HttpPost("{id}/ausencia")]
     public async Task<IActionResult> MarcarAusencia(int id)
     {
-        var turno = await _context.Turnos.FindAsync(id);
+        var turno = await _context.Turnos
+            .Include(t => t.Paciente)
+            .FirstOrDefaultAsync(t => t.Id == id);
         if (turno == null) return NotFound();
 
         if (!turno.FechaHora.IsWithinCancellationWindow())
             return BadRequest(new { mensaje = "La ausencia solo puede registrarse dentro de las 24 horas del turno." });
 
-        turno.Estado = EstadoTurno.NoShow;
-        await _context.SaveChangesAsync();
-        return Ok(turno);
+        if (turno.Paciente == null)
+            return NotFound(new { mensaje = "Paciente asociado al turno no encontrado." });
+
+        using (var transaction = await _context.Database.BeginTransactionAsync())
+        {
+            try
+            {
+                turno.Estado = EstadoTurno.NoShow;
+                turno.Paciente.NoShowCount++;
+
+                if (turno.Paciente.NoShowCount >= 3)
+                {
+                    turno.Paciente.Bloqueado = true;
+                    turno.Paciente.FechaBloqueo = DateTime.Now;
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return Ok(turno);
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
     }
 
     [HttpPut("{id}/estado")]

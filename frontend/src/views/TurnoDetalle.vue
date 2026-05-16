@@ -23,7 +23,7 @@
 
       <div style="display: flex; gap: 10px">
         <button class="btn-danger" @click="cancelar">Cancelar turno</button>
-        <button @click="marcarAusencia">Marcar ausencia</button>
+        <button v-if="turno.estado !== 'NoShow'" @click="marcarAusencia">Marcar ausencia</button>
       </div>
     </div>
     <p v-else>Cargando...</p>
