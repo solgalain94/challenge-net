@@ -22,8 +22,8 @@
       </div>
 
       <div style="display: flex; gap: 10px">
-        <button class="btn-danger" @click="cancelar">Cancelar turno</button>
-        <button v-if="turno.estado !== 'NoShow'" @click="marcarAusencia">Marcar ausencia</button>
+        <button v-if="turno.puedeCancelarse" class="btn-danger" @click="cancelar">Cancelar turno</button>
+        <button v-if="turno.puedeMarcarAusencia" @click="marcarAusencia">Marcar ausencia</button>
       </div>
     </div>
     <p v-else>Cargando...</p>
