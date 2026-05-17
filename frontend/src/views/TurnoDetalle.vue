@@ -11,7 +11,7 @@
       <div class="detail-row"><span class="label">Estado</span><span>{{ turno.estado }}</span></div>
       <div class="detail-row"><span class="label">Motivo</span><span>{{ turno.motivo }}</span></div>
 
-      <div style="margin-top: 24px">
+      <div v-if="turno.estado !== 'Cancelado' && turno.estado !== 'NoShow'" style="margin-top: 24px">
         <div class="form-group">
           <label>Cambiar estado</label>
           <select v-model="nuevoEstado">
@@ -67,7 +67,13 @@ export default {
       await turnosApi.cancelar(this.turno.id)
     },
     async marcarAusencia() {
-      await turnosApi.marcarAusencia(this.turno.id)
+      try {
+        const res = await turnosApi.marcarAusencia(this.turno.id)
+        this.turno = res.data
+        this.nuevoEstado = this.turno.estado
+      } catch {
+        alert('Error al procesar la solicitud')
+      }
     }
   }
 }

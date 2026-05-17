@@ -59,7 +59,15 @@ export default {
       return new Date(fecha).toLocaleString('es-AR')
     },
     async cancelar(id) {
-      await turnosApi.cancelar(id)
+      try {
+        const res = await turnosApi.cancelar(id)
+        const index = this.turnos.findIndex(t => t.id === id)
+        if (index !== -1) {
+          this.turnos[index] = res.data
+        }
+      } catch {
+        alert('Error al procesar la solicitud')
+      }
     }
   }
 }
