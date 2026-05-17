@@ -22,7 +22,7 @@
       </div>
       <div class="form-group">
         <label>Fecha y hora</label>
-        <input type="datetime-local" v-model="form.fechaHora" />
+        <input type="datetime-local" v-model="form.fechaHora" :min="minDateTime" />
       </div>
       <div class="form-group">
         <label>Motivo</label>
@@ -47,10 +47,15 @@ export default {
         motivo: ''
       },
       pacientes: [],
-      medicos: []
+      medicos: [],
+      minDateTime: ''
     }
   },
   async mounted() {
+    const now = new Date()
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
+    this.minDateTime = now.toISOString().slice(0, 16)
+
     try {
       const [pRes, mRes] = await Promise.all([pacientesApi.getAll(), medicosApi.getAll()])
       this.pacientes = pRes.data
