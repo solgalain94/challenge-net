@@ -178,7 +178,10 @@ public class TurnosController : ControllerBase
     [HttpPut("{id}/estado")]
     public async Task<IActionResult> ActualizarEstado(int id, [FromBody] ActualizarEstadoRequest request)
     {
-        var turno = await _context.Turnos.FindAsync(id);
+        var turno = await _context.Turnos
+            .Include(t => t.Paciente)
+            .Include(t => t.Medico)
+            .FirstOrDefaultAsync(t => t.Id == id);
         if (turno == null) return NotFound();
 
         turno.Estado = request.Estado;
