@@ -90,18 +90,50 @@ public class TurnosController : ControllerBase
         }
     }
 
-    [HttpGet("cancelar/{id}")]
+    [HttpPost("cancelar/{id}")]
     public async Task<IActionResult> CancelarTurno(int id)
     {
-        var turno = await _context.Turnos.FindAsync(id);
+        var turno = await _context.Turnos
+            .Include(t => t.Paciente)
+            .FirstOrDefaultAsync(t => t.Id == id);
         if (turno == null) return NotFound();
 
-        if (turno.FechaHora - DateTime.Now < TimeSpan.FromHours(23))
-            return BadRequest(new { mensaje = "No se puede cancelar con menos de 24 horas de anticipación." });
+        if (!turno.PuedeCancelarse)
+            return BadRequest(new { mensaje = "Solo se pueden cancelar turnos pendientes o confirmados." });
 
-        turno.Estado = EstadoTurno.Cancelado;
-        await _context.SaveChangesAsync();
-        return Ok(turno);
+        var tiempoAntes = turno.FechaHora - DateTime.Now;
+        var esCancelacionTardia = tiempoAntes < TimeSpan.FromHours(24);
+
+        if (turno.Paciente == null)
+            return NotFound(new { mensaje = "Paciente asociado al turno no encontrado." });
+
+        using (var transaction = await _context.Database.BeginTransactionAsync())
+        {
+            try
+            {
+                turno.Estado = EstadoTurno.Cancelado;
+
+                if (esCancelacionTardia)
+                {
+                    turno.Paciente.NoShowCount++;
+
+                    if (turno.Paciente.NoShowCount >= 3)
+                    {
+                        turno.Paciente.Bloqueado = true;
+                        turno.Paciente.FechaBloqueo = DateTime.Now;
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return Ok(turno);
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
     }
 
     [HttpPost("{id}/ausencia")]
