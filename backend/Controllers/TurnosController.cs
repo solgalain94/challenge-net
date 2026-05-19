@@ -98,6 +98,7 @@ public class TurnosController : ControllerBase
     {
         var turno = await _context.Turnos
             .Include(t => t.Paciente)
+            .Include(t => t.Medico)
             .FirstOrDefaultAsync(t => t.Id == id);
         if (turno == null) return NotFound();
 
@@ -144,6 +145,7 @@ public class TurnosController : ControllerBase
     {
         var turno = await _context.Turnos
             .Include(t => t.Paciente)
+            .Include(t => t.Medico)
             .FirstOrDefaultAsync(t => t.Id == id);
         if (turno == null) return NotFound();
 
@@ -186,6 +188,9 @@ public class TurnosController : ControllerBase
             .Include(t => t.Medico)
             .FirstOrDefaultAsync(t => t.Id == id);
         if (turno == null) return NotFound();
+
+        if (turno.Estado == EstadoTurno.Cancelado || turno.Estado == EstadoTurno.NoShow)
+            return BadRequest(new { mensaje = "No se puede cambiar el estado de un turno cancelado o con ausencia registrada." });
 
         turno.Estado = request.Estado;
         await _context.SaveChangesAsync();

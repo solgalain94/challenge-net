@@ -60,7 +60,11 @@ export default {
     },
     async cancelar(id) {
       try {
-        await turnosApi.cancelar(id)
+        const res = await turnosApi.cancelar(id)
+        const index = this.turnos.findIndex(t => t.id === id)
+        if (index !== -1) {
+          this.turnos[index] = res.data
+        }
       } catch (error) {
         const message = error.response?.data?.mensaje || 'Error al procesar la solicitud'
         alert(message)
