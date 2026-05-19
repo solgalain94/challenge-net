@@ -66,6 +66,9 @@ export default {
   },
   methods: {
     async guardar() {
+      if (!confirm('¿Confirmar creación de turno?')) {
+        return
+      }
       try {
         await turnosApi.create({
           pacienteId: Number(this.form.pacienteId),
