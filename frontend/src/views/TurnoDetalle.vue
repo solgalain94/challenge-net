@@ -59,15 +59,26 @@ export default {
       try {
         const res = await turnosApi.actualizarEstado(this.turno.id, { estado: this.nuevoEstado })
         this.turno = res.data
-      } catch {
-        alert('Error al procesar la solicitud')
+      } catch (error) {
+        const message = error.response?.data?.mensaje || 'Error al procesar la solicitud'
+        alert(message)
       }
     },
     async cancelar() {
-      await turnosApi.cancelar(this.turno.id)
+      try {
+        await turnosApi.cancelar(this.turno.id)
+      } catch (error) {
+        const message = error.response?.data?.mensaje || 'Error al procesar la solicitud'
+        alert(message)
+      }
     },
     async marcarAusencia() {
-      await turnosApi.marcarAusencia(this.turno.id)
+      try {
+        await turnosApi.marcarAusencia(this.turno.id)
+      } catch (error) {
+        const message = error.response?.data?.mensaje || 'Error al procesar la solicitud'
+        alert(message)
+      }
     }
   }
 }

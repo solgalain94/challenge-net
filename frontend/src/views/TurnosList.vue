@@ -59,7 +59,12 @@ export default {
       return new Date(fecha).toLocaleString('es-AR')
     },
     async cancelar(id) {
-      await turnosApi.cancelar(id)
+      try {
+        await turnosApi.cancelar(id)
+      } catch (error) {
+        const message = error.response?.data?.mensaje || 'Error al procesar la solicitud'
+        alert(message)
+      }
     }
   }
 }
