@@ -63,6 +63,9 @@ public class TurnosController : ControllerBase
                 if (paciente.Bloqueado)
                     return BadRequest(new { mensaje = "El paciente se encuentra bloqueado para agendar turnos online." });
 
+                if (turno.FechaHora <= DateTime.Now)
+                    return BadRequest(new { mensaje = "La fecha y hora del turno debe ser en el futuro." });
+
                 var medicoExiste = await _context.Medicos.AnyAsync(m => m.Id == turno.MedicoId);
                 if (!medicoExiste)
                     return NotFound(new { mensaje = "Médico no encontrado." });
