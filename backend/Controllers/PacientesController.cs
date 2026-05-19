@@ -68,4 +68,15 @@ public class PacientesController : ControllerBase
         await _context.SaveChangesAsync();
         return NoContent();
     }
+
+    [HttpPut("{id}/reactivate")]
+    public async Task<IActionResult> Reactivate(int id)
+    {
+        var paciente = await _context.Pacientes.FindAsync(id);
+        if (paciente == null) return NotFound();
+
+        paciente.isActive = true;
+        await _context.SaveChangesAsync();
+        return Ok(paciente);
+    }
 }
