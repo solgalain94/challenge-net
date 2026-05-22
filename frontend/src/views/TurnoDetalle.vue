@@ -11,7 +11,7 @@
       <div class="detail-row"><span class="label">Estado</span><span>{{ turno.estado }}</span></div>
       <div class="detail-row"><span class="label">Motivo</span><span>{{ turno.motivo }}</span></div>
 
-      <div style="margin-top: 24px">
+      <div v-if="turno.estado !== 'Cancelado' && turno.estado !== 'NoShow'" style="margin-top: 24px">
         <div class="form-group">
           <label>Cambiar estado</label>
           <select v-model="nuevoEstado">
@@ -22,8 +22,8 @@
       </div>
 
       <div style="display: flex; gap: 10px">
-        <button class="btn-danger" @click="cancelar">Cancelar turno</button>
-        <button @click="marcarAusencia">Marcar ausencia</button>
+        <button v-if="turno.puedeCancelarse" class="btn-danger" @click="cancelar">Cancelar turno</button>
+        <button v-if="turno.puedeMarcarAusencia" @click="marcarAusencia">Marcar ausencia</button>
       </div>
     </div>
     <p v-else>Cargando...</p>
@@ -59,15 +59,28 @@ export default {
       try {
         const res = await turnosApi.actualizarEstado(this.turno.id, { estado: this.nuevoEstado })
         this.turno = res.data
-      } catch {
-        alert('Error al procesar la solicitud')
+      } catch (error) {
+        const message = error.response?.data?.mensaje || 'Error al procesar la solicitud'
+        alert(message)
       }
     },
     async cancelar() {
-      await turnosApi.cancelar(this.turno.id)
+      try {
+        await turnosApi.cancelar(this.turno.id)
+      } catch (error) {
+        const message = error.response?.data?.mensaje || 'Error al procesar la solicitud'
+        alert(message)
+      }
     },
     async marcarAusencia() {
-      await turnosApi.marcarAusencia(this.turno.id)
+      try {
+        const res = await turnosApi.marcarAusencia(this.turno.id)
+        this.turno = res.data
+        this.nuevoEstado = this.turno.estado
+      } catch (error) {
+        const message = error.response?.data?.mensaje || 'Error al procesar la solicitud'
+        alert(message)
+      }
     }
   }
 }

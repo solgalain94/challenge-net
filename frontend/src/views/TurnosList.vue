@@ -27,7 +27,7 @@
           <td>{{ turno.motivo }}</td>
           <td>
             <router-link :to="`/turnos/${turno.id}`">Ver</router-link>
-            <button class="btn-danger" style="margin-left: 8px" @click="cancelar(turno.id)">Cancelar</button>
+            <button v-if="turno.puedeCancelarse" class="btn-danger" style="margin-left: 8px" @click="cancelar(turno.id)">Cancelar</button>
           </td>
         </tr>
       </tbody>
@@ -59,7 +59,16 @@ export default {
       return new Date(fecha).toLocaleString('es-AR')
     },
     async cancelar(id) {
-      await turnosApi.cancelar(id)
+      try {
+        const res = await turnosApi.cancelar(id)
+        const index = this.turnos.findIndex(t => t.id === id)
+        if (index !== -1) {
+          this.turnos[index] = res.data
+        }
+      } catch (error) {
+        const message = error.response?.data?.mensaje || 'Error al procesar la solicitud'
+        alert(message)
+      }
     }
   }
 }

@@ -45,60 +45,152 @@ public class TurnosController : ControllerBase
         if (paciente == null)
             return NotFound(new { mensaje = "Paciente no encontrado." });
 
-        if (paciente.Bloqueado)
-            return BadRequest(new { mensaje = "El paciente se encuentra bloqueado para agendar turnos online." });
+        using (var transaction = await _context.Database.BeginTransactionAsync())
+        {
+            try
+            {
+                // Evaluar si el bloqueo temporal expiró (30 días)
+                if (paciente.Bloqueado && paciente.FechaBloqueo.HasValue)
+                {
+                    var tiempoDesdeBloqueo = DateTime.Now - paciente.FechaBloqueo.Value;
+                    if (tiempoDesdeBloqueo.TotalDays >= 30)
+                    {
+                        paciente.Bloqueado = false;
+                        paciente.FechaBloqueo = null;
+                    }
+                }
 
-        var medicoExiste = await _context.Medicos.AnyAsync(m => m.Id == turno.MedicoId);
-        if (!medicoExiste)
-            return NotFound(new { mensaje = "Médico no encontrado." });
+                if (paciente.Bloqueado)
+                    return BadRequest(new { mensaje = "El paciente se encuentra bloqueado para agendar turnos online." });
 
-        var turnoConflicto = await _context.Turnos.AnyAsync(t =>
-            t.MedicoId == turno.MedicoId &&
-            t.FechaHora == turno.FechaHora &&
-            t.Estado != EstadoTurno.Cancelado);
-        if (turnoConflicto)
-            return BadRequest(new { mensaje = "El médico ya tiene un turno en ese horario." });
+                if (turno.FechaHora <= DateTime.Now)
+                    return BadRequest(new { mensaje = "La fecha y hora del turno debe ser en el futuro." });
 
-        turno.FechaCreacion = DateTime.UtcNow;
-        turno.Estado = EstadoTurno.Pendiente;
-        _context.Turnos.Add(turno);
-        await _context.SaveChangesAsync();
-        return CreatedAtAction(nameof(GetById), new { id = turno.Id }, turno);
+                var medicoExiste = await _context.Medicos.AnyAsync(m => m.Id == turno.MedicoId);
+                if (!medicoExiste)
+                    return NotFound(new { mensaje = "Médico no encontrado." });
+
+                var turnoConflicto = await _context.Turnos.AnyAsync(t =>
+                    t.MedicoId == turno.MedicoId &&
+                    t.FechaHora == turno.FechaHora &&
+                    t.Estado != EstadoTurno.Cancelado);
+                if (turnoConflicto)
+                    return BadRequest(new { mensaje = "El médico ya tiene un turno en ese horario." });
+
+                turno.FechaCreacion = DateTime.UtcNow;
+                turno.Estado = EstadoTurno.Pendiente;
+                _context.Turnos.Add(turno);
+                await _context.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+                return CreatedAtAction(nameof(GetById), new { id = turno.Id }, turno);
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
     }
 
-    [HttpGet("cancelar/{id}")]
+    [HttpPost("cancelar/{id}")]
     public async Task<IActionResult> CancelarTurno(int id)
     {
-        var turno = await _context.Turnos.FindAsync(id);
+        var turno = await _context.Turnos
+            .Include(t => t.Paciente)
+            .Include(t => t.Medico)
+            .FirstOrDefaultAsync(t => t.Id == id);
         if (turno == null) return NotFound();
 
-        if (turno.FechaHora - DateTime.Now < TimeSpan.FromHours(23))
-            return BadRequest(new { mensaje = "No se puede cancelar con menos de 24 horas de anticipación." });
+        if (!turno.PuedeCancelarse)
+            return BadRequest(new { mensaje = "Solo se pueden cancelar turnos pendientes o confirmados." });
 
-        turno.Estado = EstadoTurno.Cancelado;
-        await _context.SaveChangesAsync();
-        return Ok(turno);
+        var tiempoAntes = turno.FechaHora - DateTime.Now;
+        var esCancelacionTardia = tiempoAntes < TimeSpan.FromHours(24);
+
+        if (turno.Paciente == null)
+            return NotFound(new { mensaje = "Paciente asociado al turno no encontrado." });
+
+        using (var transaction = await _context.Database.BeginTransactionAsync())
+        {
+            try
+            {
+                turno.Estado = EstadoTurno.Cancelado;
+
+                if (esCancelacionTardia)
+                {
+                    turno.Paciente.NoShowCount++;
+
+                    if (turno.Paciente.NoShowCount >= 3)
+                    {
+                        turno.Paciente.Bloqueado = true;
+                        turno.Paciente.FechaBloqueo = DateTime.Now;
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return Ok(turno);
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
     }
 
     [HttpPost("{id}/ausencia")]
     public async Task<IActionResult> MarcarAusencia(int id)
     {
-        var turno = await _context.Turnos.FindAsync(id);
+        var turno = await _context.Turnos
+            .Include(t => t.Paciente)
+            .Include(t => t.Medico)
+            .FirstOrDefaultAsync(t => t.Id == id);
         if (turno == null) return NotFound();
 
         if (!turno.FechaHora.IsWithinCancellationWindow())
             return BadRequest(new { mensaje = "La ausencia solo puede registrarse dentro de las 24 horas del turno." });
 
-        turno.Estado = EstadoTurno.NoShow;
-        await _context.SaveChangesAsync();
-        return Ok(turno);
+        if (turno.Paciente == null)
+            return NotFound(new { mensaje = "Paciente asociado al turno no encontrado." });
+
+        using (var transaction = await _context.Database.BeginTransactionAsync())
+        {
+            try
+            {
+                turno.Estado = EstadoTurno.NoShow;
+                turno.Paciente.NoShowCount++;
+
+                if (turno.Paciente.NoShowCount >= 3)
+                {
+                    turno.Paciente.Bloqueado = true;
+                    turno.Paciente.FechaBloqueo = DateTime.Now;
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return Ok(turno);
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
     }
 
     [HttpPut("{id}/estado")]
     public async Task<IActionResult> ActualizarEstado(int id, [FromBody] ActualizarEstadoRequest request)
     {
-        var turno = await _context.Turnos.FindAsync(id);
+        var turno = await _context.Turnos
+            .Include(t => t.Paciente)
+            .Include(t => t.Medico)
+            .FirstOrDefaultAsync(t => t.Id == id);
         if (turno == null) return NotFound();
+
+        if (turno.Estado == EstadoTurno.Cancelado || turno.Estado == EstadoTurno.NoShow)
+            return BadRequest(new { mensaje = "No se puede cambiar el estado de un turno cancelado o con ausencia registrada." });
 
         turno.Estado = request.Estado;
         await _context.SaveChangesAsync();

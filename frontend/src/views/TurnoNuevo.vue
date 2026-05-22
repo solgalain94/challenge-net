@@ -22,7 +22,7 @@
       </div>
       <div class="form-group">
         <label>Fecha y hora</label>
-        <input type="datetime-local" v-model="form.fechaHora" />
+        <input type="datetime-local" v-model="form.fechaHora" :min="minDateTime" />
       </div>
       <div class="form-group">
         <label>Motivo</label>
@@ -47,10 +47,15 @@ export default {
         motivo: ''
       },
       pacientes: [],
-      medicos: []
+      medicos: [],
+      minDateTime: ''
     }
   },
   async mounted() {
+    const now = new Date()
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
+    this.minDateTime = now.toISOString().slice(0, 16)
+
     try {
       const [pRes, mRes] = await Promise.all([pacientesApi.getAll(), medicosApi.getAll()])
       this.pacientes = pRes.data
@@ -61,6 +66,9 @@ export default {
   },
   methods: {
     async guardar() {
+      if (!confirm('¿Confirmar creación de turno?')) {
+        return
+      }
       try {
         await turnosApi.create({
           pacienteId: Number(this.form.pacienteId),
@@ -69,8 +77,9 @@ export default {
           motivo: this.form.motivo
         })
         this.$router.push('/turnos')
-      } catch {
-        alert('Error al procesar la solicitud')
+      } catch (error) {
+        const message = error.response?.data?.mensaje || 'Error al procesar la solicitud'
+        alert(message)
       }
     }
   }

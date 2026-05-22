@@ -19,7 +19,9 @@ public class PacientesController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
-        var pacientes = await _context.Pacientes.ToListAsync();
+        var pacientes = await _context.Pacientes
+            .Where(p => p.isActive)
+            .ToListAsync();
         return Ok(pacientes);
     }
 
@@ -62,8 +64,19 @@ public class PacientesController : ControllerBase
         var paciente = await _context.Pacientes.FindAsync(id);
         if (paciente == null) return NotFound();
 
-        _context.Pacientes.Remove(paciente);
+        paciente.isActive = false;
         await _context.SaveChangesAsync();
         return NoContent();
+    }
+
+    [HttpPut("{id}/reactivate")]
+    public async Task<IActionResult> Reactivate(int id)
+    {
+        var paciente = await _context.Pacientes.FindAsync(id);
+        if (paciente == null) return NotFound();
+
+        paciente.isActive = true;
+        await _context.SaveChangesAsync();
+        return Ok(paciente);
     }
 }
